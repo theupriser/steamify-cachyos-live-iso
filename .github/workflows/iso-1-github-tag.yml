@@ -55,14 +55,15 @@ jobs:
             [ -n "$steamify" ] || { echo "::error::no VERSION in steamify.sh at $sref"; exit 1; }
           fi
           stamp="$(date -u +%y%m%d)" day="$(date -u +%Y.%m.%d)"
+          base="$(head -n 1 CHANGELOG.md | sed 's/^# *//')"   # the CachyOS version (first line of the changelog)
           kind="${{ inputs.kind }}"
           if [ -z "$kind" ] || [ "$kind" = auto ]; then
             if [ "${{ github.ref }}" = refs/heads/master ]; then kind=release; else kind=dev; fi
           fi
           if [ "$kind" = release ]; then
-            tag="v$steamify-$stamp" pre="" name="CachyOS with Steamify Live ISO $steamify ($day UTC)"
+            tag="v$steamify-$stamp" pre="" name="CachyOS $base with Steamify $steamify ($day UTC)"
           else
-            tag="v$steamify-dev-$stamp" pre="--prerelease" name="CachyOS with Steamify Live ISO $steamify (test build $day UTC)"
+            tag="v$steamify-dev-$stamp" pre="--prerelease" name="CachyOS $base with Steamify $steamify (test build $day UTC)"
           fi
           # The ISO's file on the mirror is named after the tag (iso-2-gitea-build.yml, profiledef.sh), so its
           # download link is known now.
@@ -71,7 +72,6 @@ jobs:
           #  - the CachyOS base version (first line of CHANGELOG.md, the fork's upstream changelog),
           #  - the Steamify version's own changelog section (steamify-cachyos CHANGELOG.md at the ref or tag it is built from),
           #  - this repository's commits since the previous release of the same kind.
-          base="$(head -n 1 CHANGELOG.md | sed 's/^# *//')"
           steamify_notes="$(gh api "repos/theupriser/steamify-cachyos/contents/CHANGELOG.md?ref=${sref:-v$steamify}" -q .content 2> /dev/null | base64 -d 2> /dev/null |
               awk -v v="$steamify" 'index($0, "## " v " ") == 1 {f = 1; next} f && /^## / {exit} f')"
           [ "$kind" = release ] && want_pre=false || want_pre=true
