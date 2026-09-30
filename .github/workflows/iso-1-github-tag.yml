@@ -73,8 +73,9 @@ jobs:
             # The mirror has to see the tag go (it drops the tag and its release with the ISO); otherwise the new tag is only an
             # update there and starts no build.
             if mirror_sync; then
+              # The tag list, not .../tags/<tag>: that URL answers 404 on this server even for tags that exist.
               for _ in $(seq 36); do
-                [ "$(curl -s -o /dev/null -w '%{http_code}' "$GITEA_URL/api/v1/repos/$GITEA_REPO/tags/$tag")" = 404 ] && break
+                curl -s "$GITEA_URL/api/v1/repos/$GITEA_REPO/tags?limit=100" | grep -q "\"name\":\"$tag\"" || break
                 sleep 5
               done
             fi
