@@ -19,8 +19,6 @@ Tick items off as they are done; the newest entries are at the top of each list.
       its ISO is deleted first). Watch the first time there are more than 10 releases of a kind; it hasn't run yet.
 - [ ] **Build badge, the other states**: succeeded was seen (`v2.9.6-260930`). Failed, cancelled and a build superseded by a
       newer one haven't been seen; a crashed runner leaves the badge on "running".
-- [ ] **Same-day replacement on the mirror** of a real release (second `kind=release` build of one day): check that the
-      mirror's release gets the new ISO (new asset id) and notes.
 - [ ] **CHANGELOG.md**: the hand-written section `## CachyOS with Steamify Live ISO` is no longer used (the release notes
       are generated); delete it or turn it into something else.
 - [ ] **Check with the CachyOS team** whether the installer branding and the ISO file name are fine with them.
@@ -44,6 +42,8 @@ Tick items off as they are done; the newest entries are at the top of each list.
       changelog section, commits since the previous release; the mirror's release uses the same text.
 - [x] **Retention** of at most 10 dev and 10 real releases, deleting the mirror's release with its ISO too (PR #22; first
       clean-up still to be seen, above).
+- [x] **Same-day replacement of a real release** (2026-09-30): the official build for `v2.9.6-260930` replaced the test build's
+      release on the mirror (ISO asset 42 -> 50, new title and generated notes, badge green with the public run link).
 - [x] **Release notes** leave out the workflow and docs commits (`ci`, `docs`, `…(ci):`) in their list of ISO changes.
 - [x] **The ISO is built on the Gitea mirror's runner** (`iso-2-gitea-build.yml`) and hosted there (over GitHub's 2 GB limit);
       the VM tests run locally (`scripts/vmtest.sh --install` in steamify-cachyos-dev), not on the runners.
