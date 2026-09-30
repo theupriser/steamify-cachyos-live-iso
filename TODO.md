@@ -20,7 +20,7 @@
 2. **Names**: only the installer says Steamify ("CachyOS with Steamify
    Installer", productName set by calamares-online.sh); the live session,
    Hello and About this System keep CachyOS's own names (legal clarity). The
-   ISO file stays `steamify-cachyos-<date>.iso`.
+   ISO file is named by the day, like CachyOS: `steamify-cachyos-<version>-[dev-]<YYMMDD>-x86_64.iso`.
 3. **Check the names** after the next build: installer title, Hello and
    About this System say CachyOS.
 4. ~~Steamify PR for `feat/defaults-options`~~ — done: 2.7.0 (`--options`,
@@ -29,13 +29,11 @@
    released. **The ISO builder is up to date with this**: no checkout
    argument needed, `steamify-prepare.sh` (no args) and `calamares-online.sh`
    at boot both just fetch the newest release, so the ISO always has 2.8.0+
-   without a rebuild for a Steamify-side change alone. Only pass
-   `steamify-prepare.sh <checkout>` / `vmisobuild.sh --steamify <path>` when
-   testing an *unreleased* Steamify change.
-5. **Build in the test VM** instead of on the Steam Machine
-   (steam-machine-iso skill), and install the result unattended with
-   `scripts/vminstall.sh --iso` (vm-install skill; the Calamares Steamify
-   step then needs `steamify-install` run from the live script).
+   without a rebuild for a Steamify-side change alone. A build of an *unreleased* Steamify change passes it as the input
+   `steamify_ref` of `iso-1-github-tag.yml` (a release branch does this by itself);
+   by hand: `steamify-prepare.sh <checkout>` / `vmisobuild.sh --steamify <path>`.
+5. ~~Build in the test VM~~ — done: the ISO is built on the Gitea mirror's runner by `iso-2-gitea-build.yml` (see the
+   `steamify-iso-release` skill in steamify-cachyos-dev); test the result locally with `scripts/vmtest.sh --install`.
 6. **Test on the real Steam Machine** from a USB stick (gamescope, LEDs, CEC,
    power-off) before calling the ISO usable.
 
