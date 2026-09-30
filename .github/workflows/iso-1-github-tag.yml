@@ -118,13 +118,20 @@ jobs:
           echo "ISO_TAG=$tag" >> "$GITHUB_ENV"
           echo "STEAMIFY_REF=$sref" >> "$GITHUB_ENV"
 
-          # Retention (space): at most 10 dev and 10 real releases; the oldest go, release and tag. The mirror drops the
-          # tag with its release and ISO at its next sync (the step below).
+          # Retention (space): at most 10 dev and 10 real releases; the oldest go: the mirror's release with its ISO, then the GitHub
+          # release and tag (the mirror drops the tag at its next sync, the step below).
           keep=10
           for pre_flag in true false; do
             gh release list -L 200 --json tagName,isPrerelease,createdAt \
                 -q "[.[] | select(.isPrerelease == $pre_flag)] | sort_by(.createdAt) | reverse | .[$keep:][] | .tagName" |
-              while read -r old; do echo "Retention: removing $old"; gh release delete "$old" --cleanup-tag -y; done
+              while read -r old; do
+                echo "Retention: removing $old"
+                # The mirror keeps a release (and its 3 GB ISO) after its tag is gone, so it is deleted there first.
+                if [ -n "$GIT_UPRISER_TOKEN" ]; then
+                  curl -sS -X DELETE -H "Authorization: token $GIT_UPRISER_TOKEN" -o /dev/null -w "  mirror release $old: HTTP %{http_code}\n" "$GITEA_URL/api/v1/repos/$GITEA_REPO/releases/tags/$old" || true
+                fi
+                gh release delete "$old" --cleanup-tag -y
+              done
           done
 
       # The mirror takes the tag (sync), then the build on the mirror is started explicitly (its dispatch API): a tag that
