@@ -228,11 +228,15 @@ jobs:
           run="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           api="https://api.github.com/repos/theupriser/steamify-cachyos-live-iso/releases"
           curl -fsS -H "Authorization: Bearer $GH_TOKEN" "$api/tags/$tag" -o /tmp/rel.json || { echo "::warning::no GitHub release for $tag"; exit 0; }
-          ST="$st" COL="$col" RUN="$run" python3 - << 'PY'
+          ST="$st" COL="$col" RUN="$run" RUN_ID="${{ github.run_id }}" python3 - << 'PY'
           import json, os, re
           d = json.load(open("/tmp/rel.json"))
-          badge = f"[![ISO build](https://img.shields.io/badge/ISO_build-{os.environ['ST']}-{os.environ['COL']})]({os.environ['RUN']})"
           body = d.get("body") or ""
+          # This runner reports its internal address (http://server:3000) as the server URL: the public one is in the
+          # release page link that iso-1 wrote into the notes.
+          m = re.search(r"\]\((https?://[^)\s]+)/releases/tag/", body)
+          run = f"{m.group(1)}/actions/runs/{os.environ['RUN_ID']}" if m else os.environ["RUN"]
+          badge = f"[![ISO build](https://img.shields.io/badge/ISO_build-{os.environ['ST']}-{os.environ['COL']})]({run})"
           pat = re.compile(r"\[?!\[ISO build\]\([^)]*\)(\]\([^)]*\))?")
           body = pat.sub(lambda m: badge, body, count=1) if pat.search(body) else badge + "\n\n" + body
           json.dump({"body": body}, open("/tmp/patch.json", "w"))
