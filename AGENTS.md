@@ -115,14 +115,16 @@ failure, and retry the copy (it's idempotent) rather than the whole build.
 Full write-up, with every trap: `steamify-iso-release` in steamify-cachyos-dev. What matters here:
 
 - `.github/workflows/iso-1-github-tag.yml` (GitHub, `workflow_dispatch` only: by hand, or started by a new Steamify
-  release, whose `bundle.yml` needs the secret `ISO_DISPATCH_TOKEN`) names the release: the Steamify version plus
-  GitHub's UTC time, `vX.Y.Z-[dev.]YYYY.MM.DD-HHMM`, an **annotated** tag and a release with notes and the direct
-  download link. The workflow always runs from `master`; its input `kind` (`release`, `dev`, or `auto`: release on master, dev on other branches) decides: `release` is a real release, `dev` a `dev.` pre-release. steamify-cachyos' bundle.yml passes it: a version published from main -> `release`, a version on a release branch -> `dev`.
+  release, whose `bundle.yml` needs the secret `ISO_DISPATCH_TOKEN`) names the release like CachyOS does, by the day (GitHub's UTC
+  date, no time): `vX.Y.Z-YYMMDD` (real) or `vX.Y.Z-dev-YYMMDD` (dev), file `steamify-cachyos-X.Y.Z-[dev-]YYMMDD-x86_64.iso`, an **annotated** tag and a
+  release with notes and the direct download link. One ISO per day and kind: a second build the same day deletes
+  the earlier release and tag (GitHub), waits until the mirror has dropped them, then tags again. Retention: at most 10 dev and 10 real
+  releases are kept (space); the oldest are deleted with `gh release delete --cleanup-tag`, and the mirror drops their tags, releases and ISOs at its next sync. The workflow always runs from `master`; its input `kind` (`release`, `dev`, or `auto`: release on master, dev on other branches) decides: `release` is a real release, `dev` a `dev-` pre-release. steamify-cachyos' bundle.yml passes it: a version published from main -> `release`, a version on a release branch -> `dev`.
 - `.github/workflows/iso-2-gitea-build.yml` (Gitea, `on: push: tags: v*`, skipped on GitHub) runs two jobs for that
   tag: build the ISO, then attach it to the mirror's release. It is not tested there (the runner is small): the VM tests
   run on GitHub, in steamify-cachyos `vmtest.yml`, on the newest ISO release of the mirror. The tag decides everything: Steamify version (`steamify-prepare.sh`
   takes `STEAMIFY_VERSION`), file name (`STEAMIFY_ISO_VERSION` -> `iso_version` in `profiledef.sh`), label
-  (`STEAMIFY_BUILD_STAMP`), boot menu and `/etc/steammachine-iso-build`. The build reads no clock; without a
+  (`STEAMIFY_BUILD_STAMP`, YYMMDD), boot menu and `/etc/steammachine-iso-build`. The build reads no clock; without a
   tag everything says `local`.
 - `util-iso.sh` runs `sudo mkarchiso`: sudo drops the environment, so `--preserve-env=STEAMIFY_ISO_VERSION,
   STEAMIFY_BUILD_STAMP` is required (without it the ISO comes out `-local-`).
