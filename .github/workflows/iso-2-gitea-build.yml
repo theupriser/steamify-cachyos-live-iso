@@ -14,6 +14,11 @@ name: ISO 2/2 · Build and publish (Gitea)
 # run by itself, so nothing is triggered by tag pushes).
 on:
   workflow_dispatch:
+    inputs:
+      steamify_ref:
+        description: "Steamify branch or tag to build with (set by iso-1; empty: the release the tag names)"
+        type: string
+        default: ""
 
 # One run at a time for the whole workflow (not per tag): a new run stops the running one and takes over.
 concurrency:
@@ -75,7 +80,15 @@ jobs:
           echo "steamify=${m[1]}" >> "$GITHUB_OUTPUT"
 
       - name: Steamify on the ISO (the version the tag names)
-        run: ./steamify-prepare.sh
+        run: |
+          ref="${{ inputs.steamify_ref }}"
+          if [ -n "$ref" ]; then
+            # A branch (a release branch before its release): its checkout goes on the ISO.
+            git clone -q --depth 1 --branch "$ref" https://github.com/theupriser/steamify-cachyos.git /tmp/steamify-src
+            ./steamify-prepare.sh /tmp/steamify-src
+          else
+            ./steamify-prepare.sh
+          fi
 
       - name: Build
         run: |
@@ -159,12 +172,13 @@ jobs:
           fi
           { echo "publish=true"; echo "name=$name"; } >> "$GITHUB_OUTPUT"
           section="$(awk '/^## CachyOS with Steamify Live ISO/ {found = 1; next} found && /^#/ {exit} found' CHANGELOG.md)"
+          src="${{ inputs.steamify_ref }}"; src="${src:-v$STEAMIFY_VERSION}"
           {
             echo "Built from \`$(git rev-parse --short HEAD)\` ($tag) with Steamify $STEAMIFY_VERSION."
             echo
             echo "SHA-256: \`$(cut -d' ' -f1 "$iso.sha256")\`, label \`STEAMIFY_${STEAMIFY_VERSION//./_}_$b\`"
             echo
-            echo "Sources: [Steamify](https://github.com/theupriser/steamify-cachyos/tree/v$STEAMIFY_VERSION), this repository at this tag, and the packages' sources at [CachyOS](https://github.com/CachyOS) and [Arch Linux](https://archlinux.org/packages/)."
+            echo "Sources: [Steamify](https://github.com/theupriser/steamify-cachyos/tree/$src), this repository at this tag, and the packages' sources at [CachyOS](https://github.com/CachyOS) and [Arch Linux](https://archlinux.org/packages/)."
             echo
             echo "$section"
           } > release-notes.md

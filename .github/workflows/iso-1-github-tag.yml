@@ -20,6 +20,10 @@ on:
         type: choice
         options: [auto, release, dev]
         default: auto
+      steamify_ref:
+        description: "Steamify branch or tag to build the ISO with (empty: the newest published release). A release branch tests its own version."
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -42,6 +46,12 @@ jobs:
         run: |
           steamify="$(gh release view -R theupriser/steamify-cachyos --json tagName -q .tagName)"
           steamify="${steamify#v}"
+          # A branch or tag of Steamify to build with (a release branch before its release), else the newest release.
+          sref="${{ inputs.steamify_ref }}"
+          if [ -n "$sref" ]; then
+            steamify="$(gh api "repos/theupriser/steamify-cachyos/contents/steamify.sh?ref=$sref" -q .content | base64 -d | sed -n 's/^VERSION=//p' | head -n 1)"
+            [ -n "$steamify" ] || { echo "::error::no VERSION in steamify.sh at $sref"; exit 1; }
+          fi
           stamp="$(date -u +%y%m%d)" day="$(date -u +%Y.%m.%d)"
           kind="${{ inputs.kind }}"
           if [ -z "$kind" ] || [ "$kind" = auto ]; then
@@ -57,11 +67,11 @@ jobs:
           file="steamify-cachyos-${tag#v}-x86_64.iso" dl="$GITEA_URL/$GITEA_REPO/releases/download/$tag"
           # The Steamify section of CHANGELOG.md ("## CachyOS with Steamify Live ISO"), without its heading.
           section="$(awk '/^## CachyOS with Steamify Live ISO/ {found = 1; next} found && /^#/ {exit} found' CHANGELOG.md)"
-          notes="The ISO is built from \`$(git rev-parse --short HEAD)\` (${{ github.ref_name }}) with Steamify $steamify and published on the mirror (GitHub releases take at most 2 GB per file), about half an hour after this release (the mirror's sync, then the build):
+          notes="The ISO is built from \`$(git rev-parse --short HEAD)\` (${{ github.ref_name }}) with Steamify $steamify${sref:+ (branch $sref)} and published on the mirror (GitHub releases take at most 2 GB per file), about half an hour after this release (the mirror's sync, then the build):
 
           **Download: [$file]($dl/$file)** ([SHA-256]($dl/$file.sha256), [release page]($GITEA_URL/$GITEA_REPO/releases/tag/$tag))
 
-          Sources: [Steamify](https://github.com/theupriser/steamify-cachyos/tree/v$steamify), this repository at this tag, and the packages' sources at [CachyOS](https://github.com/CachyOS) and [Arch Linux](https://archlinux.org/packages/).
+          Sources: [Steamify](https://github.com/theupriser/steamify-cachyos/tree/${sref:-v$steamify}), this repository at this tag, and the packages' sources at [CachyOS](https://github.com/CachyOS) and [Arch Linux](https://archlinux.org/packages/).
 
           $section"
           # One ISO per day and kind: the newest build of a day replaces the earlier one (space), here and on the mirror.
@@ -78,6 +88,7 @@ jobs:
           gh release create "$tag" --verify-tag $pre --title "$name" --notes "$notes"
           echo "Released $tag"
           echo "ISO_TAG=$tag" >> "$GITHUB_ENV"
+          echo "STEAMIFY_REF=$sref" >> "$GITHUB_ENV"
 
           # Retention (space): at most 10 dev and 10 real releases; the oldest go, release and tag. The mirror drops the
           # tag with its release and ISO at its next sync (the step below).
@@ -108,5 +119,5 @@ jobs:
           [ "$got" = "$want" ] || { echo "::error::the mirror does not have $ISO_TAG ($want) after 5 minutes"; exit 1; }
           # ref: the full name (refs/tags/...), as in Gitea's API documentation; --fail-with-body shows the server's reason.
           curl -sS --fail-with-body --retry 3 -X POST -H "Authorization: token $GIT_UPRISER_TOKEN" -H "Content-Type: application/json" \
-              -d "{\"ref\":\"refs/tags/$ISO_TAG\"}" "$api/actions/workflows/iso-2-gitea-build.yml/dispatches"
+              -d "{\"ref\":\"refs/tags/$ISO_TAG\",\"inputs\":{\"steamify_ref\":\"$STEAMIFY_REF\"}}" "$api/actions/workflows/iso-2-gitea-build.yml/dispatches"
           echo "Started the mirror's build for $ISO_TAG"
