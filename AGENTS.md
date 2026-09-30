@@ -117,7 +117,7 @@ Full write-up, with every trap: `steamify-iso-release` in steamify-cachyos-dev. 
 - `.github/workflows/iso-1-github-tag.yml` (GitHub, `workflow_dispatch` only: by hand, or started by a new Steamify
   release, whose `bundle.yml` needs the secret `ISO_DISPATCH_TOKEN`) names the release: the Steamify version plus
   GitHub's UTC time, `vX.Y.Z-[dev.]YYYY.MM.DD-HHMM`, an **annotated** tag and a release with notes and the direct
-  download link. `feat/steamify` makes a `dev.` pre-release, `master` a real one.
+  download link. The workflow always runs from `master`; its input `kind` (`release`, `dev`, or `auto`: release on master, dev on other branches) decides: `release` is a real release, `dev` a `dev.` pre-release. steamify-cachyos' bundle.yml passes it: a version published from main -> `release`, a version on a release branch -> `dev`.
 - `.github/workflows/iso-2-gitea-build.yml` (Gitea, `on: push: tags: v*`, skipped on GitHub) runs two jobs for that
   tag: build the ISO, then attach it to the mirror's release. It is not tested there (the runner is small): the VM tests
   run on GitHub, in steamify-cachyos `vmtest.yml`, on the newest ISO release of the mirror. The tag decides everything: Steamify version (`steamify-prepare.sh`

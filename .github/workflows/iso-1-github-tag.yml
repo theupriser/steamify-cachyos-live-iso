@@ -4,13 +4,20 @@
 # GitHub releases take at most 2 GB per file, the ISO is bigger, and a release on the mirror only survives its
 # syncs when its tag comes from here.
 # Name: the Steamify version the ISO gets (its newest release) plus the time (UTC, GitHub's clock when the release starts):
-# master releases v<steamify>-<YYYY.MM.DD>-<HHMM>, feat/steamify a pre-release v<steamify>-dev.<...>.
+# kind release: v<steamify>-<YYYY.MM.DD>-<HHMM>, a real release; kind dev: a pre-release v<steamify>-dev.<...>.
 name: ISO 1/2 · Tag and release (GitHub)
 
-# Started by a new Steamify release (its bundle.yml, secret ISO_DISPATCH_TOKEN) or by hand (Run workflow,
-# on master for a release, on feat/steamify for a test build); not by every push.
+# Always run from master. Started by steamify-cachyos (its bundle.yml, secret ISO_DISPATCH_TOKEN), which says what to
+# build: a version published from main -> kind release, a version on a release branch -> kind dev. Or by hand (Run
+# workflow); `auto` is a release on master and a dev build on any other branch. Not started by pushes.
 on:
   workflow_dispatch:
+    inputs:
+      kind:
+        description: "release (a real ISO), dev (a pre-release test build) or auto (release on master, dev elsewhere)"
+        type: choice
+        options: [auto, release, dev]
+        default: auto
 
 permissions:
   contents: write
@@ -33,7 +40,11 @@ jobs:
           steamify="$(gh release view -R theupriser/steamify-cachyos --json tagName -q .tagName)"
           steamify="${steamify#v}"
           stamp="$(date -u +%Y.%m.%d-%H%M)"
-          if [ "${{ github.ref }}" = refs/heads/master ]; then
+          kind="${{ inputs.kind }}"
+          if [ -z "$kind" ] || [ "$kind" = auto ]; then
+            if [ "${{ github.ref }}" = refs/heads/master ]; then kind=release; else kind=dev; fi
+          fi
+          if [ "$kind" = release ]; then
             tag="v$steamify-$stamp" pre="" name="CachyOS with Steamify Live ISO $steamify ($stamp UTC)"
           else
             tag="v$steamify-dev.$stamp" pre="--prerelease" name="CachyOS with Steamify Live ISO $steamify (test build $stamp UTC)"
