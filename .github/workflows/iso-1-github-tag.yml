@@ -4,13 +4,22 @@
 # GitHub releases take at most 2 GB per file, the ISO is bigger, and a release on the mirror only survives its
 # syncs when its tag comes from here.
 # Name: the Steamify version the ISO gets (its newest release) plus the time (UTC, GitHub's clock when the release starts):
-# master releases v<steamify>-<YYYY.MM.DD>-<HHMM>, feat/steamify a pre-release v<steamify>-dev.<...>.
+# kind release: v<steamify>-<YYMMDD>, a real release; kind dev: a pre-release v<steamify>-dev-<YYMMDD> (like CachyOS: the
+# day, no time). One ISO per day and kind: the newest build of a day replaces the earlier one. At most 10 dev and 10 real
+# releases are kept (the oldest go, here and, with the mirror's next sync, there).
 name: ISO 1/2 · Tag and release (GitHub)
 
-# Started by a new Steamify release (its bundle.yml, secret ISO_DISPATCH_TOKEN) or by hand (Run workflow,
-# on master for a release, on feat/steamify for a test build); not by every push.
+# Always run from master. Started by steamify-cachyos (its bundle.yml, secret ISO_DISPATCH_TOKEN), which says what to
+# build: a version published from main -> kind release, a version on a release branch -> kind dev. Or by hand (Run
+# workflow); `auto` is a release on master and a dev build on any other branch. Not started by pushes.
 on:
   workflow_dispatch:
+    inputs:
+      kind:
+        description: "release (a real ISO), dev (a pre-release test build) or auto (release on master, dev elsewhere)"
+        type: choice
+        options: [auto, release, dev]
+        default: auto
 
 permissions:
   contents: write
@@ -29,14 +38,19 @@ jobs:
       - name: Tag and release
         env:
           GH_TOKEN: ${{ github.token }}
+          GIT_UPRISER_TOKEN: ${{ secrets.GIT_UPRISER_TOKEN }}
         run: |
           steamify="$(gh release view -R theupriser/steamify-cachyos --json tagName -q .tagName)"
           steamify="${steamify#v}"
-          stamp="$(date -u +%Y.%m.%d-%H%M)"
-          if [ "${{ github.ref }}" = refs/heads/master ]; then
-            tag="v$steamify-$stamp" pre="" name="CachyOS with Steamify Live ISO $steamify ($stamp UTC)"
+          stamp="$(date -u +%y%m%d)" day="$(date -u +%Y.%m.%d)"
+          kind="${{ inputs.kind }}"
+          if [ -z "$kind" ] || [ "$kind" = auto ]; then
+            if [ "${{ github.ref }}" = refs/heads/master ]; then kind=release; else kind=dev; fi
+          fi
+          if [ "$kind" = release ]; then
+            tag="v$steamify-$stamp" pre="" name="CachyOS with Steamify Live ISO $steamify ($day UTC)"
           else
-            tag="v$steamify-dev.$stamp" pre="--prerelease" name="CachyOS with Steamify Live ISO $steamify (test build $stamp UTC)"
+            tag="v$steamify-dev-$stamp" pre="--prerelease" name="CachyOS with Steamify Live ISO $steamify (test build $day UTC)"
           fi
           # The ISO's file on the mirror is named after the tag (iso-2-gitea-build.yml, profiledef.sh), so its
           # download link is known now.
@@ -50,6 +64,21 @@ jobs:
           Sources: [Steamify](https://github.com/theupriser/steamify-cachyos/tree/v$steamify), this repository at this tag, and the packages' sources at [CachyOS](https://github.com/CachyOS) and [Arch Linux](https://archlinux.org/packages/).
 
           $section"
+          # One ISO per day and kind: the newest build of a day replaces the earlier one (space), here and on the mirror.
+          mirror_sync() { [ -n "$GIT_UPRISER_TOKEN" ] && curl -fsS --retry 5 --retry-delay 10 --retry-all-errors -X POST -H "Authorization: token $GIT_UPRISER_TOKEN" "$GITEA_URL/api/v1/repos/$GITEA_REPO/mirror-sync" > /dev/null; }
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null 2>&1 || gh release view "$tag" > /dev/null 2>&1; then
+            echo "$tag exists: replacing it"
+            gh release delete "$tag" --cleanup-tag -y 2> /dev/null || true
+            git push origin ":refs/tags/$tag" 2> /dev/null || true
+            # The mirror has to see the tag go (it drops the tag and its release with the ISO); otherwise the new tag is only an
+            # update there and starts no build.
+            if mirror_sync; then
+              for _ in $(seq 36); do
+                [ "$(curl -s -o /dev/null -w '%{http_code}' "$GITEA_URL/api/v1/repos/$GITEA_REPO/tags/$tag")" = 404 ] && break
+                sleep 5
+              done
+            fi
+          fi
           # An annotated tag: its own date, so the mirror sorts releases on the same commit in order (a
           # lightweight tag only has its commit's date).
           git config user.name "github-actions[bot]"
@@ -57,6 +86,15 @@ jobs:
           git tag -a "$tag" -m "$name" "$GITHUB_SHA" && git push origin "refs/tags/$tag"
           gh release create "$tag" --verify-tag $pre --title "$name" --notes "$notes"
           echo "Released $tag"
+
+          # Retention (space): at most 10 dev and 10 real releases; the oldest go, release and tag. The mirror drops the
+          # tag with its release and ISO at its next sync (the step below).
+          keep=10
+          for pre_flag in true false; do
+            gh release list -L 200 --json tagName,isPrerelease,createdAt \
+                -q "[.[] | select(.isPrerelease == $pre_flag)] | sort_by(.createdAt) | reverse | .[$keep:][] | .tagName" |
+              while read -r old; do echo "Retention: removing $old"; gh release delete "$old" --cleanup-tag -y; done
+          done
 
       # Optional: sync the mirror at once instead of at its interval (a Gitea token with repository write
       # access as the secret GIT_UPRISER_TOKEN).

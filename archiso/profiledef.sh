@@ -3,8 +3,8 @@
 
 iso_name="steamify-cachyos"
 # The label follows the release tag, which GitHub names (iso-1-github-tag.yml): the Steamify version on the ISO
-# (steamify-prepare.sh put it there) plus the tag's date and time, e.g. STEAMIFY_2_9_3_20260929_2030 (ISO 9660:
-# at most 32 characters, A-Z 0-9 _). STEAMIFY_BUILD_STAMP (YYYYMMDD_HHMM, UTC) comes from the tag; the build
+# (steamify-prepare.sh put it there) plus the tag's day, e.g. STEAMIFY_2_9_3_260929 (ISO 9660:
+# at most 32 characters, A-Z 0-9 _). STEAMIFY_BUILD_STAMP (YYMMDD, UTC) comes from the tag; the build
 # reads no clock of its own. Built by hand, without a tag: LOCAL.
 _steamify="$(sed -n 's/^VERSION=//p' "${BASH_SOURCE[0]%/*}/airootfs/usr/local/share/steamify/steamify.sh" 2>/dev/null | head -n 1)"
 _stamp="${STEAMIFY_BUILD_STAMP:-LOCAL}"
@@ -13,7 +13,7 @@ iso_label="${iso_label:0:32}"
 iso_publisher="CachyOS <https://cachyos.org>"
 iso_application="Steamify CachyOS Live (based on CachyOS)"
 # The file name (<iso_name>-<iso_version>-x86_64.iso) is the release tag without its v (STEAMIFY_ISO_VERSION
-# from the tag: steamify-cachyos-2.9.3-dev.2026.09.29-2030-x86_64.iso). Built by hand, without a tag: local.
+# from the tag: steamify-cachyos-2.9.6-dev-260930-x86_64.iso). Built by hand, without a tag: local.
 iso_version="${STEAMIFY_ISO_VERSION:-local}"
 install_dir="arch"
 buildmodes=('iso')
