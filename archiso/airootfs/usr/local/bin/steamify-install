@@ -1,0 +1,62 @@
+#!/bin/bash
+# steamify-install <target root> <user> <choice>: runs Steamify's setup for
+# the new user inside the installed system (Calamares, after the users and
+# services steps), as chosen on the installer's Steamify page: <choice> is the
+# ids that are on, comma-separated, plus "boot" for Boot into Desktop, or
+# "none" (packagechooser_steamifypage). Steamify refuses root and asks sudo
+# per command, so the
+# user gets a NOPASSWD rule for this run only, named to be read last: sudo
+# takes the last matching rule, and a later %wheel rule would ask again. Never fails the install: a
+# problem leaves the log and Steamify can be run again from the desktop.
+root="$1" user="$2" choice="${3:-}"
+# Not filled in by Calamares (empty, or the literal ${gs[...]}): the page's
+# default, everything on.
+[[ -z "$choice" || "$choice" == *'${'* ]] && choice=gaming,theme,glyphs,single,launcher,notify,vram,cec,machine,poweroff
+boot=gamescope options=""
+for id in ${choice//,/ }; do
+    case "$id" in
+        boot) boot=desktop ;;
+        none) ;;
+        *) options+="${options:+,}$id" ;;
+    esac
+done
+# /var/log is its own btrfs subvolume (@log) that the installer doesn't mount at $root/var/log: what is
+# written there now (these logs, Steamify's) would end up hidden under the mount after boot. Mount it
+# from the new system's fstab and leave it mounted: the caller reads the log afterwards, and unmounts
+# all of $root at the end anyway (Calamares' umount step, the test's poweroff).
+if [[ -n "$root" && -d "$root/var/log" ]] && ! mountpoint -q "$root/var/log"; then
+    read -r dev _ _ opts _ < <(awk '$2 == "/var/log" && $1 !~ /^#/' "$root/etc/fstab" 2>/dev/null)
+    [[ -n "${dev:-}" ]] && mount -o "$opts" "$dev" "$root/var/log" 2>/dev/null
+fi
+# systemd-boot: cachyos-installer runs `bootctl install` in a chroot, and bootctl leaves the EFI
+# variables alone there: no "Linux Boot Manager" boot entry, so the firmware tries the network and
+# its other entries first and finds the disk's fallback path last (or never). bootctl can't be made
+# to do it from the chroot either (it writes the entry without the partition: HD(0,GPT,0000...)).
+# So register it from the live system, with the ESP's real disk and partition; efibootmgr puts it first.
+if [[ -n "$root" && -f "$root/boot/EFI/systemd/systemd-bootx64.efi" && -d /sys/firmware/efi/efivars ]]; then
+    {
+        esp="$(findmnt -no SOURCE "$root/boot")"
+        disk="/dev/$(lsblk -no PKNAME "$esp" | head -n 1)"
+        part="$(cat "/sys/class/block/${esp##*/}/partition")"
+        echo "ESP: $esp (disk $disk, partition $part)"
+        for n in $(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} \(Fallback \)\{0,1\}Linux Boot Manager.*/\1/p'); do
+            efibootmgr -q -b "$n" -B
+        done
+        efibootmgr --create --disk "$disk" --part "$part" --label "Linux Boot Manager" --loader '\EFI\systemd\systemd-bootx64.efi'
+    } > "$root/var/log/steamify-bootentry.log" 2>&1
+fi
+log="$root/var/log/steamify-install.log"
+rule="$root/etc/sudoers.d/zz-steamify-install"
+[[ -d "$root" && -n "$user" ]] || exit 0
+# Everything switched off on the page: nothing to set up.
+[[ -n "$options" ]] || { echo "Nothing chosen on the Steamify page." > "$log"; exit 0; }
+
+install -Dm755 /usr/local/share/steamify/steamify.sh "$root/var/tmp/steamify.sh"
+printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$user" > "$rule"
+chmod 440 "$rule"
+arch-chroot "$root" runuser -u "$user" -- env -i HOME="/home/$user" USER="$user" LOGNAME="$user" \
+    PATH=/usr/local/bin:/usr/bin TERM=dumb LANG=C.UTF-8 \
+    bash -c 'cd ~ && bash /var/tmp/steamify.sh --defaults --options "$0" --boot "$1" < /dev/null' "$options" "$boot" > "$log" 2>&1
+echo "exit: $?" >> "$log"
+rm -f "$rule" "$root/var/tmp/steamify.sh"
+exit 0

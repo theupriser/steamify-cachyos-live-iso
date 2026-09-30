@@ -104,7 +104,14 @@ generate_version_tag() {
     local _profile="$1"
     local _version="$2"
     if [ "$_profile" == "desktop" ]; then
-        echo "${_version}" > ${src_dir}/archiso/airootfs/etc/version-tag
+        # Steam Machine edition: CachyOS Hello won't install an ISO newer
+        # than CachyOS's newest release (it calls it a testing ISO), so the
+        # tag is that release, the one this build follows; the build's own
+        # date goes to /etc/steammachine-iso-build.
+        local _release
+        _release="$(curl -fsS --max-time 20 https://cachyos.org/versions.json | grep -o '"desktopISOVersion":"[0-9]*"' | grep -o '[0-9]\+')"
+        echo "${_release:-${_version}}" > ${src_dir}/archiso/airootfs/etc/version-tag
+        echo "${_version}" > ${src_dir}/archiso/airootfs/etc/steammachine-iso-build
     fi
 }
 
@@ -122,6 +129,10 @@ modify_mkarchiso() {
     else
         msg "mkarchiso is already patched!"
     fi
+    # Steamify: live-system changes after the packages (they overwrite airootfs).
+    if ! grep -q 'steamify-customize.sh' /usr/bin/mkarchiso; then
+        sudo sed "s#_run_once _make_customize_airootfs#_run_once _make_customize_airootfs\n\t${src_dir}/steamify-customize.sh \"\${pacstrap_dir}\"#" -i /usr/bin/mkarchiso
+    fi
 }
 
 prepare_profile(){
@@ -129,7 +140,10 @@ prepare_profile(){
 
     info "Profile: [%s]" "${profile}"
 
-    local _iso_version="$(date +%y%m%d)"
+    # The release tag without its v when the release workflow builds (STEAMIFY_ISO_VERSION): the boot menu
+    # and /etc/steammachine-iso-build name the same release as the file, label and tag (no clock of its own).
+    # By hand, without a tag: local.
+    local _iso_version="${STEAMIFY_ISO_VERSION:-local}"
     change_grub_version "${_iso_version}"
 
     # Fetch up-to-date version of CachyOS repo mirrorlist
@@ -187,11 +201,22 @@ run_build() {
 
     [ -d "$outFolder/$_profile" ] || mkdir -p "$outFolder/$_profile"
     cd ${work_dir}/archiso/
-    sudo mkarchiso -v -w ${work_dir} -o "$outFolder/$_profile" ${work_dir}/archiso/
-    sudo chown $USER $outFolder
+    # sudo drops the environment: the release tag's file name and label (profiledef.sh) must get through.
+    sudo --preserve-env=STEAMIFY_ISO_VERSION,STEAMIFY_BUILD_STAMP mkarchiso -v -w ${work_dir} -o "$outFolder/$_profile" ${work_dir}/archiso/
+    # $USER is empty when this runs as root (e.g. in a container): an empty
+    # chown failed and aborted the rest (the build was done, the exit code 1).
+    sudo chown "${SUDO_USER:-${USER:-$(id -un)}}" "$outFolder"
 
-    cp ${work_dir}/iso/arch/pkglist.x86_64.txt "$outFolder/$_profile/$(gen_iso_fn).pkgs.txt"
-    mv "$outFolder/$_profile/cachyos-$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)-x86_64.iso" "$outFolder/$_profile/${iso_file}"
+    # Steamify: profiledef.sh's iso_name (steamify-cachyos) names the ISO, so
+    # CachyOS's rename only applies when mkarchiso wrote cachyos-<date>.
+    local built="$outFolder/$_profile/cachyos-$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)-x86_64.iso"
+    if [[ -e "$built" ]]; then
+        mv "$built" "$outFolder/$_profile/${iso_file}"
+    else
+        built="$(ls -t "$outFolder/$_profile"/*.iso | head -1)"
+        iso_file="$(basename "$built")"
+    fi
+    cp ${work_dir}/iso/arch/pkglist.x86_64.txt "$outFolder/$_profile/${iso_file%.iso}.pkgs.txt"
 
     msg "Done [Build ISO] ${iso_file}"
     msg "Finished building [%s]" "${_profile}"

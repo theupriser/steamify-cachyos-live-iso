@@ -1,0 +1,112 @@
+# The Steamify ISO's release, step 2 of 2 (the Gitea mirror, git.upriser.nl, on its own runner): builds the
+# ISO for a release tag that iso-1-github-tag.yml created on GitHub (it comes in with the mirror's sync, and a
+# release on the mirror only survives its syncs when its tag comes from GitHub), then attaches the ISO, its
+# checksums and package list to the mirror's release for that tag. The tag names the Steamify version and
+# the time: v<steamify>-<YYYY.MM.DD>-<HHMM> (master) or v<steamify>-dev.<...> (feat/steamify, a pre-release);
+# the ISO gets exactly that Steamify release, and its label the same moment. GitHub skips it.
+# The runner needs privileged containers (archiso mounts loop devices) and ~20 GB of disk; Gitea's
+# [repository.release] FILE_MAX_SIZE must allow the ISO (default 2 GB).
+name: ISO 2/2 · Build and publish (Gitea)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: steamify-iso-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  iso:
+    if: github.server_url != 'https://github.com'
+    runs-on: ubuntu-latest
+    container:
+      image: docker.io/cachyos/cachyos:latest
+      options: --privileged
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Tools
+        run: |
+          pacman-key --init && pacman-key --populate
+          # nodejs: the actions below run in this container
+          pacman -Syu --noconfirm --needed archiso mkinitcpio-archiso git squashfs-tools grub sudo nodejs curl jq
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version and time from the tag
+        run: |
+          tag="${{ github.ref_name }}"
+          [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-(dev\.)?([0-9]{4})\.([0-9]{2})\.([0-9]{2})-([0-9]{4})$ ]] ||
+              { echo "::error::$tag is not a Steamify ISO release tag (v<steamify>-[dev.]<YYYY.MM.DD>-<HHMM>)"; exit 1; }
+          m=("${BASH_REMATCH[@]}")
+          {
+            echo "STEAMIFY_VERSION=${m[1]}"
+            # One moment for the ISO's label (profiledef.sh) and the release's name: the tag's (UTC).
+            echo "STEAMIFY_BUILD_STAMP=${m[3]}${m[4]}${m[5]}_${m[6]}"
+            echo "ISO_PRERELEASE=$([ -n "${m[2]}" ] && echo true || echo false)"
+            # The ISO's file name: the tag without its v (profiledef.sh).
+            echo "STEAMIFY_ISO_VERSION=${tag#v}"
+          } >> "$GITHUB_ENV"
+
+      - name: Steamify on the ISO (the version the tag names)
+        run: ./steamify-prepare.sh
+
+      - name: Build
+        run: |
+          ./build-live-modules.sh
+          ./build-calamares-modules.sh
+          ./buildiso.sh -p desktop -w || ./buildiso.sh -p desktop -c -w
+
+      - name: Release name and notes
+        id: rel
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          iso="$(ls out/desktop/*.iso | head -n 1)"
+          [ -f "$iso" ] || { echo "::error::no ISO in out/desktop"; exit 1; }
+          tag="${{ github.ref_name }}" b="$STEAMIFY_BUILD_STAMP"
+          stamp="${b:0:4}.${b:4:2}.${b:6:2}-${b:9:4}"
+          if [ "$ISO_PRERELEASE" = true ]; then
+            name="CachyOS with Steamify Live ISO $STEAMIFY_VERSION (test build $stamp UTC)"
+          else
+            name="CachyOS with Steamify Live ISO $STEAMIFY_VERSION ($stamp UTC)"
+          fi
+          # Never overwritten: a release for this tag that already has the ISO is left alone.
+          api="${{ github.server_url }}/api/v1/repos/${{ github.repository }}"
+          if curl -fsS -H "Authorization: token $TOKEN" "$api/releases/tags/$tag" -o /tmp/rel.json &&
+              [ "$(jq '[.assets[] | select(.name | endswith(".iso"))] | length' /tmp/rel.json)" -gt 0 ]; then
+            echo "::warning::$tag already has its ISO and won't be overwritten."
+            echo "publish=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          { echo "publish=true"; echo "name=$name"; } >> "$GITHUB_OUTPUT"
+          section="$(awk '/^## CachyOS with Steamify Live ISO/ {found = 1; next} found && /^#/ {exit} found' CHANGELOG.md)"
+          {
+            echo "Built from \`$(git rev-parse --short HEAD)\` ($tag) with Steamify $STEAMIFY_VERSION."
+            echo
+            echo "SHA-256: \`$(cut -d' ' -f1 "$iso.sha256")\`, label \`STEAMIFY_${STEAMIFY_VERSION//./_}_$b\`"
+            echo
+            echo "Sources: [Steamify](https://github.com/theupriser/steamify-cachyos/tree/v$STEAMIFY_VERSION), this repository at this tag, and the packages' sources at [CachyOS](https://github.com/CachyOS) and [Arch Linux](https://archlinux.org/packages/)."
+            echo
+            echo "$section"
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Publish ${{ github.ref_name }}
+        if: steps.rel.outputs.publish == 'true'
+        uses: akkuman/gitea-release-action@v1.3.7
+        with:
+          token: ${{ github.token }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ steps.rel.outputs.name }}
+          body_path: release-notes.md
+          prerelease: ${{ env.ISO_PRERELEASE }}
+          files: |
+            out/desktop/*.iso
+            out/desktop/*.iso.sha256
+            out/desktop/*.iso.sha1
+            out/desktop/*.pkgs.txt
