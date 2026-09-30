@@ -10,9 +10,9 @@
 # [repository.release] FILE_MAX_SIZE must allow the ISO (default 2 GB).
 name: ISO 2/2 · Build and publish (Gitea)
 
+# Started by iso-1-github-tag.yml through the mirror's dispatch API, with the tag as the ref (a replaced tag starts no
+# run by itself, so nothing is triggered by tag pushes).
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 # One run at a time for the whole workflow (not per tag): a new run stops the running one and takes over.

@@ -118,9 +118,9 @@ Full write-up, with every trap: `steamify-iso-release` in steamify-cachyos-dev. 
   release, whose `bundle.yml` needs the secret `ISO_DISPATCH_TOKEN`) names the release like CachyOS does, by the day (GitHub's UTC
   date, no time): `vX.Y.Z-YYMMDD` (real) or `vX.Y.Z-dev-YYMMDD` (dev), file `steamify-cachyos-X.Y.Z-[dev-]YYMMDD-x86_64.iso`, an **annotated** tag and a
   release with notes and the direct download link. One ISO per day and kind: a second build the same day deletes
-  the earlier release and tag (GitHub), waits until the mirror has dropped them, then tags again. Retention: at most 10 dev and 10 real
+  the earlier release and tag (GitHub) and tags again; the mirror takes the new tag object, iso-2 replaces the old mirror release. Retention: at most 10 dev and 10 real
   releases are kept (space); the oldest are deleted with `gh release delete --cleanup-tag`, and the mirror drops their tags, releases and ISOs at its next sync. The workflow always runs from `master`; its input `kind` (`release`, `dev`, or `auto`: release on master, dev on other branches) decides: `release` is a real release, `dev` a `dev-` pre-release. steamify-cachyos' bundle.yml passes it: a version published from main -> `release`, a version on a release branch -> `dev`.
-- `.github/workflows/iso-2-gitea-build.yml` (Gitea, `on: push: tags: v*`, skipped on GitHub) runs two jobs for that
+- `.github/workflows/iso-2-gitea-build.yml` (Gitea, `workflow_dispatch` with the tag as the ref, started by iso-1's last step through the mirror's dispatch API after the mirror has the new tag object; a tag push starts nothing, because a replaced tag of the same name starts no run; skipped on GitHub) runs two jobs for that
   tag: build the ISO, then attach it to the mirror's release. It is not tested there (the runner is small): the VM tests
   run on GitHub, in steamify-cachyos `vmtest.yml`, on the newest ISO release of the mirror. The tag decides everything: Steamify version (`steamify-prepare.sh`
   takes `STEAMIFY_VERSION`), file name (`STEAMIFY_ISO_VERSION` -> `iso_version` in `profiledef.sh`), label
