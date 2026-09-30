@@ -75,12 +75,13 @@ jobs:
           steamify_notes="$(gh api "repos/theupriser/steamify-cachyos/contents/CHANGELOG.md?ref=${sref:-v$steamify}" -q .content 2> /dev/null | base64 -d 2> /dev/null |
               awk -v v="$steamify" 'index($0, "## " v " ") == 1 {f = 1; next} f && /^## / {exit} f')"
           [ "$kind" = release ] && want_pre=false || want_pre=true
+          [ "$kind" = release ] && kind_name="real release" || kind_name="dev build"
           prev="$(gh release list -L 50 --json tagName,isPrerelease,createdAt -q "[.[] | select(.isPrerelease == $want_pre and .tagName != \"$tag\")] | sort_by(.createdAt) | reverse | .[0].tagName // empty")"
           # Commits that change the ISO itself: not the workflow ones (type or scope ci, e.g. ci: / fix(ci):) and not docs:.
           if [ -n "$prev" ] && git rev-parse -q --verify "refs/tags/$prev" > /dev/null; then
             range="$prev..HEAD"; limit=40; since="Since \`$prev\`:"
           else
-            range="HEAD"; limit=12; since="The latest commits (there is no earlier $kind release to compare with):"
+            range="HEAD"; limit=12; since="The latest commits (there is no earlier $kind_name to compare with):"
           fi
           changes="$(git log --no-merges --format='%s' "$range" | grep -Ev '^(ci|docs)(\(.*\))?:|^[a-z]+\(ci\):' | sed 's/^/- /' | head -n "$limit" || true)"
           [ -n "$changes" ] || changes="- No changes to the ISO itself."
