@@ -106,6 +106,7 @@ jobs:
             sleep 5
           done
           [ "$got" = "$want" ] || { echo "::error::the mirror does not have $ISO_TAG ($want) after 5 minutes"; exit 1; }
-          curl -fsS --retry 3 --retry-all-errors -X POST -H "Authorization: token $GIT_UPRISER_TOKEN" -H "Content-Type: application/json" \
-              -d "{\"ref\":\"$ISO_TAG\"}" "$api/actions/workflows/iso-2-gitea-build.yml/dispatches"
+          # ref: the full name (refs/tags/...), as in Gitea's API documentation; --fail-with-body shows the server's reason.
+          curl -sS --fail-with-body --retry 3 -X POST -H "Authorization: token $GIT_UPRISER_TOKEN" -H "Content-Type: application/json" \
+              -d "{\"ref\":\"refs/tags/$ISO_TAG\"}" "$api/actions/workflows/iso-2-gitea-build.yml/dispatches"
           echo "Started the mirror's build for $ISO_TAG"
