@@ -178,11 +178,12 @@ jobs:
           if curl -fsS "https://api.github.com/repos/theupriser/steamify-cachyos-live-iso/releases/tags/$tag" -o /tmp/ghrel.json; then
             jq -r '.body // ""' /tmp/ghrel.json | sed '/ISO build\]/d' > release-notes.md
           else
-            echo "Built from \`$(git rev-parse --short HEAD)\` ($tag) with Steamify $STEAMIFY_VERSION." > release-notes.md
+            echo "Built from \`$(git rev-parse --short HEAD)\` ($tag) with Steamify $STEAMIFY_VERSION." > release-notes.md  # fallback when GitHub cannot be reached
           fi
           {
             echo
-            echo "SHA-256: \`$(cut -d' ' -f1 "$iso.sha256")\`, label \`STEAMIFY_${STEAMIFY_VERSION//./_}_$b\`"
+            echo "### Checksum"
+            echo "SHA-256 of the ISO: \`$(cut -d' ' -f1 "$iso.sha256")\` (label \`STEAMIFY_${STEAMIFY_VERSION//./_}_$b\`)."
           } >> release-notes.md
           cat release-notes.md
 

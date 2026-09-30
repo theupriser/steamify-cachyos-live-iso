@@ -76,25 +76,31 @@ jobs:
               awk -v v="$steamify" 'index($0, "## " v " ") == 1 {f = 1; next} f && /^## / {exit} f')"
           [ "$kind" = release ] && want_pre=false || want_pre=true
           prev="$(gh release list -L 50 --json tagName,isPrerelease,createdAt -q "[.[] | select(.isPrerelease == $want_pre and .tagName != \"$tag\")] | sort_by(.createdAt) | reverse | .[0].tagName // empty")"
+          # Commits that change the ISO itself: not the workflow ones (type or scope ci, e.g. ci: / fix(ci):) and not docs:.
           if [ -n "$prev" ] && git rev-parse -q --verify "refs/tags/$prev" > /dev/null; then
-            changes="$(git log --no-merges --format='- %s' "$prev..HEAD" | head -n 40)"; since="since $prev"
+            range="$prev..HEAD"; limit=40; since="Since \`$prev\`:"
           else
-            changes="$(git log --no-merges --format='- %s' -n 15)"; since="(the latest commits: no earlier $kind release)"
+            range="HEAD"; limit=12; since="The latest commits (there is no earlier $kind release to compare with):"
           fi
-          [ -n "$changes" ] || changes="- no changes since $prev"
+          changes="$(git log --no-merges --format='%s' "$range" | grep -Ev '^(ci|docs)(\(.*\))?:|^[a-z]+\(ci\):' | sed 's/^/- /' | head -n "$limit" || true)"
+          [ -n "$changes" ] || changes="- No changes to the ISO itself."
           notes="![ISO build](https://img.shields.io/badge/ISO_build-running-yellow)
 
-          CachyOS $base with Steamify $steamify${sref:+ (branch $sref)} built in: install CachyOS and turn the PC into a Steam Machine in one go. Built from \`$(git rev-parse --short HEAD)\` (${{ github.ref_name }}) and published on the mirror (GitHub releases take at most 2 GB per file), about 20 minutes after this release:
+          **CachyOS $base with Steamify $steamify${sref:+ (branch $sref)} built in.** Install CachyOS and turn the PC into a Steam Machine in one go.
+
+          The ISO is built from \`$(git rev-parse --short HEAD)\` (${{ github.ref_name }}). It is about 3 GB, more than a GitHub release can hold (2 GB per file), so it is published on the mirror about 20 minutes after this release is created:
 
           **Download: [$file]($dl/$file)** ([SHA-256]($dl/$file.sha256), [release page]($GITEA_URL/$GITEA_REPO/releases/tag/$tag))
 
           ### Steamify $steamify
-          ${steamify_notes:-No changelog section for this version.}
+          ${steamify_notes:-There is no changelog section for this version.}
 
-          ### Changes in this ISO $since
+          ### Changes in this ISO
+          $since
           $changes
 
-          Sources: [Steamify](https://github.com/theupriser/steamify-cachyos/tree/${sref:-v$steamify}), this repository at this tag, and the packages' sources at [CachyOS](https://github.com/CachyOS) and [Arch Linux](https://archlinux.org/packages/)."
+          ### Sources
+          [Steamify](https://github.com/theupriser/steamify-cachyos/tree/${sref:-v$steamify}), this repository at this tag, and the packages' sources at [CachyOS](https://github.com/CachyOS) and [Arch Linux](https://archlinux.org/packages/)."
           # One ISO per day and kind: the newest build of a day replaces the earlier one (space), here and on the mirror.
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null 2>&1 || gh release view "$tag" > /dev/null 2>&1; then
             echo "$tag exists: replacing it"
