@@ -139,3 +139,8 @@ Full write-up, with every trap: `steamify-iso-release` in steamify-cachyos-dev. 
   iso-2's last job `report` (`if: always()`) replaces it with succeeded / failed / cancelled, linked to the Gitea run,
   through the GitHub API with the Gitea secret `GH_RELEASE_TOKEN` (fine-grained, this repo, Contents read and write).
   Without the secret the badge stays "running". Gitea's own badge can't show these runs (they run on a tag ref).
+- **Release notes are generated, not written by hand** (iso-1): the CachyOS base version (first line of CHANGELOG.md), the
+  Steamify version's own changelog section (steamify-cachyos CHANGELOG.md at the ref or tag it is built from) and this
+  repository's commits since the previous release of the same kind (newest 40). iso-2 takes the same text from the GitHub
+  release for the mirror's release (one source), without the badge line, and adds the checksum line. The old hand-written
+  "## CachyOS with Steamify Live ISO" section in CHANGELOG.md is no longer used.

@@ -173,15 +173,18 @@ jobs:
           { echo "publish=true"; echo "name=$name"; } >> "$GITHUB_OUTPUT"
           section="$(awk '/^## CachyOS with Steamify Live ISO/ {found = 1; next} found && /^#/ {exit} found' CHANGELOG.md)"
           src="${{ inputs.steamify_ref }}"; src="${src:-v$STEAMIFY_VERSION}"
+          # The same notes as the GitHub release (one source: iso-1 generated them), without its badge line; the
+          # checksum line is added here. Fallback: a short text.
+          if curl -fsS "https://api.github.com/repos/theupriser/steamify-cachyos-live-iso/releases/tags/$tag" -o /tmp/ghrel.json; then
+            jq -r '.body // ""' /tmp/ghrel.json | sed '/ISO build\]/d' > release-notes.md
+          else
+            echo "Built from \`$(git rev-parse --short HEAD)\` ($tag) with Steamify $STEAMIFY_VERSION." > release-notes.md  # fallback when GitHub cannot be reached
+          fi
           {
-            echo "Built from \`$(git rev-parse --short HEAD)\` ($tag) with Steamify $STEAMIFY_VERSION."
             echo
-            echo "SHA-256: \`$(cut -d' ' -f1 "$iso.sha256")\`, label \`STEAMIFY_${STEAMIFY_VERSION//./_}_$b\`"
-            echo
-            echo "Sources: [Steamify](https://github.com/theupriser/steamify-cachyos/tree/$src), this repository at this tag, and the packages' sources at [CachyOS](https://github.com/CachyOS) and [Arch Linux](https://archlinux.org/packages/)."
-            echo
-            echo "$section"
-          } > release-notes.md
+            echo "### Checksum"
+            echo "SHA-256 of the ISO: \`$(cut -d' ' -f1 "$iso.sha256")\` (label \`STEAMIFY_${STEAMIFY_VERSION//./_}_$b\`)."
+          } >> release-notes.md
           cat release-notes.md
 
       - name: Publish ${{ github.ref_name }}
