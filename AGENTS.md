@@ -144,3 +144,5 @@ Full write-up, with every trap: `steamify-iso-release` in steamify-cachyos-dev. 
   repository's commits since the previous release of the same kind (newest 40). iso-2 takes the same text from the GitHub
   release for the mirror's release (one source), without the badge line, and adds the checksum line. The old hand-written
   "## CachyOS with Steamify Live ISO" section in CHANGELOG.md is no longer used.
+- **Release title:** `CachyOS <base> with Steamify <version> (<YYYY.MM.DD> UTC)` (dev: `(test build <date> UTC)`), the same on GitHub
+  and on the mirror; `<base>` is the first line of CHANGELOG.md (e.g. 26.08).
