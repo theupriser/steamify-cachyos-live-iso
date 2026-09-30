@@ -4,11 +4,11 @@
 # checksums and package list to the mirror's release for that tag. The tag names the Steamify version and
 # the time: v<steamify>-<YYYY.MM.DD>-<HHMM> (master) or v<steamify>-dev.<...> (feat/steamify, a pre-release);
 # the ISO gets exactly that Steamify release, and its label the same moment. GitHub skips it.
-# Three jobs: build the ISO -> test that it installs correctly (vmbootloadertest.sh --quick of steamify-cachyos-dev per loader, in
-# parallel when the runner's capacity allows) -> release, only when every test passed. (The suites that test steamify.sh run in steamify-cachyos, vmtest.yml.)
-# The runner needs /dev/kvm, privileged containers (archiso mounts loop devices) and ~20 GB of disk; Gitea's
+# Two jobs: build the ISO -> release it. The VM tests run on GitHub (steamify-cachyos vmtest.yml, the newest ISO release of
+# this mirror), where the runners are bigger.
+# The runner needs privileged containers (archiso mounts loop devices) and ~20 GB of disk; Gitea's
 # [repository.release] FILE_MAX_SIZE must allow the ISO (default 2 GB).
-name: ISO 2/2 · Build, test and publish (Gitea)
+name: ISO 2/2 · Build and publish (Gitea)
 
 on:
   push:
@@ -95,143 +95,9 @@ jobs:
             out/desktop/*.pkgs.txt
           retention-days: 3
 
-  test-fremont:
-    name: Steam Machine ${{ matrix.loader }}
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    container:
-      image: docker.io/cachyos/cachyos:latest
-      options: --privileged
-    strategy:
-      fail-fast: false
-      # max-parallel is ignored by this runner (it starts all three), so the VMs are lean: 3 x 5 GB to install.
-      max-parallel: 2
-      matrix:
-        loader: [limine, systemd-boot, grub]
-    defaults:
-      run:
-        shell: bash
-    # No `uses:` in this job on purpose: the three jobs start in the same second, and the runner clones every
-    # action into one shared folder (they broke each other's checkout of actions/cache). Plain git and curl instead.
-    steps:
-      - name: Tools and KVM
-        run: |
-          pacman-key --init && pacman-key --populate
-          pacman -Syu --noconfirm --needed qemu-desktop edk2-ovmf openssh libarchive procps-ng util-linux python git sudo curl unzip
-          # Fail at once, with a reason, when the runner cannot run a VM with KVM.
-          [ -c /dev/kvm ] || { echo "::error::no /dev/kvm in this container: the runner needs KVM (and privileged containers)"; exit 1; }
-          nproc; free -g | sed -n 2p; df -h . | tail -n 1
-
-      # The test scripts expect their repos side by side: steamify-cachyos-dev (the scripts), steamify-cachyos at
-      # the Steamify version the ISO has (shared into the VM, 9p `repo`), and the ISO this run built (its artifact).
-      - name: Scripts, Steamify and the ISO
-        run: |
-          base="${{ github.server_url }}"
-          git clone -q --depth 1 "$base/theupriser/steamify-cachyos-dev" steamify-cachyos-dev
-          git clone -q --depth 1 --branch "v${{ needs.build.outputs.steamify }}" "$base/theupriser/steamify-cachyos" steamify-cachyos
-          api="$base/api/v1/repos/${{ github.repository }}/actions"
-          id="$(curl -fsS "$api/runs/${{ github.run_id }}/artifacts" | python3 -c "import json,sys; print(next(a['id'] for a in json.load(sys.stdin)['artifacts'] if a['name']=='iso'))")"
-          curl -fsSL --retry 5 --retry-all-errors -o iso.zip "$api/artifacts/$id/zip"
-          unzip -q iso.zip -d iso && rm iso.zip
-          ls -la iso
-
-      - name: Boot loader test, Steam Machine (${{ matrix.loader }})
-        env:
-          CI: "1"
-          VM_TIMEZONE: UTC
-          # The runner is 4 cores / 8 threads: three VMs with 2 vCPUs leave 2 threads for the host and the runner.
-          VM_CPUS: "2"
-          # RAM of the live installer VM (the ISO is read from its cdrom, only the overlay and the installer use RAM).
-          VM_INSTALL_MEM: 5G
-          VM_ISO_DIR: ${{ github.workspace }}/iso
-        run: |
-          mkdir -p ~/.ssh ~/vms/pkg-cache
-          ssh-keygen -q -t ed25519 -N "" -C steamify-vm -f ~/.ssh/steamify-vm_ed25519
-          iso="$(ls "$VM_ISO_DIR"/*.iso | head -n 1)"
-          cd steamify-cachyos-dev
-          VM_ISO="$iso" scripts/vmbootloadertest.sh "${{ matrix.loader }}" --install --quick
-
-      # The logs go into this job's log (public), no artifact action needed.
-      - name: VM logs
-        if: always()
-        run: |
-          for f in ~/vms/bl-${{ matrix.loader }}/install.log ~/vms/bl-${{ matrix.loader }}/serial.log ~/vms/bl-${{ matrix.loader }}/vm.log; do
-              [ -s "$f" ] && { echo "::group::$f (last 150 lines)"; tail -n 150 "$f" | sed 's/\x1b\[[0-9;]*m//g'; echo "::endgroup::"; }
-          done
-          true
-
-  test-generic:
-    name: Plain PC ${{ matrix.loader }}
-    # After the Steam Machine tests (RAM: 3 VMs at a time), also when one of those failed.
-    needs: [build, test-fremont]
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    container:
-      image: docker.io/cachyos/cachyos:latest
-      options: --privileged
-    strategy:
-      fail-fast: false
-      # max-parallel is ignored by this runner (it starts all three), so the VMs are lean: 3 x 5 GB to install.
-      max-parallel: 2
-      matrix:
-        loader: [limine, systemd-boot, grub]
-    defaults:
-      run:
-        shell: bash
-    # No `uses:` in this job on purpose: the three jobs start in the same second, and the runner clones every
-    # action into one shared folder (they broke each other's checkout of actions/cache). Plain git and curl instead.
-    steps:
-      - name: Tools and KVM
-        run: |
-          pacman-key --init && pacman-key --populate
-          pacman -Syu --noconfirm --needed qemu-desktop edk2-ovmf openssh libarchive procps-ng util-linux python git sudo curl unzip
-          # Fail at once, with a reason, when the runner cannot run a VM with KVM.
-          [ -c /dev/kvm ] || { echo "::error::no /dev/kvm in this container: the runner needs KVM (and privileged containers)"; exit 1; }
-          nproc; free -g | sed -n 2p; df -h . | tail -n 1
-
-      # The test scripts expect their repos side by side: steamify-cachyos-dev (the scripts), steamify-cachyos at
-      # the Steamify version the ISO has (shared into the VM, 9p `repo`), and the ISO this run built (its artifact).
-      - name: Scripts, Steamify and the ISO
-        run: |
-          base="${{ github.server_url }}"
-          git clone -q --depth 1 "$base/theupriser/steamify-cachyos-dev" steamify-cachyos-dev
-          git clone -q --depth 1 --branch "v${{ needs.build.outputs.steamify }}" "$base/theupriser/steamify-cachyos" steamify-cachyos
-          api="$base/api/v1/repos/${{ github.repository }}/actions"
-          id="$(curl -fsS "$api/runs/${{ github.run_id }}/artifacts" | python3 -c "import json,sys; print(next(a['id'] for a in json.load(sys.stdin)['artifacts'] if a['name']=='iso'))")"
-          curl -fsSL --retry 5 --retry-all-errors -o iso.zip "$api/artifacts/$id/zip"
-          unzip -q iso.zip -d iso && rm iso.zip
-          ls -la iso
-
-      - name: Boot loader test, plain PC (${{ matrix.loader }})
-        env:
-          CI: "1"
-          VM_TIMEZONE: UTC
-          # The runner is 4 cores / 8 threads: three VMs with 2 vCPUs leave 2 threads for the host and the runner.
-          VM_CPUS: "2"
-          # RAM of the live installer VM (the ISO is read from its cdrom, only the overlay and the installer use RAM).
-          VM_INSTALL_MEM: 5G
-          VM_ISO_DIR: ${{ github.workspace }}/iso
-        run: |
-          mkdir -p ~/.ssh ~/vms/pkg-cache
-          ssh-keygen -q -t ed25519 -N "" -C steamify-vm -f ~/.ssh/steamify-vm_ed25519
-          iso="$(ls "$VM_ISO_DIR"/*.iso | head -n 1)"
-          cd steamify-cachyos-dev
-          VM_ISO="$iso" scripts/vmbootloadertest.sh "${{ matrix.loader }}" --install --quick --generic
-
-      # The logs go into this job's log (public), no artifact action needed.
-      - name: VM logs
-        if: always()
-        run: |
-          for f in ~/vms/bl-${{ matrix.loader }}-generic/install.log ~/vms/bl-${{ matrix.loader }}-generic/serial.log ~/vms/bl-${{ matrix.loader }}-generic/vm.log; do
-              [ -s "$f" ] && { echo "::group::$f (last 150 lines)"; tail -n 150 "$f" | sed 's/\x1b\[[0-9;]*m//g'; echo "::endgroup::"; }
-          done
-          true
-
   release:
     name: Release
-    needs: [build, test-fremont, test-generic]
+    needs: build
     runs-on: ubuntu-latest
     container:
       image: docker.io/cachyos/cachyos:latest

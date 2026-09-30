@@ -118,10 +118,9 @@ Full write-up, with every trap: `steamify-iso-release` in steamify-cachyos-dev. 
   release, whose `bundle.yml` needs the secret `ISO_DISPATCH_TOKEN`) names the release: the Steamify version plus
   GitHub's UTC time, `vX.Y.Z-[dev.]YYYY.MM.DD-HHMM`, an **annotated** tag and a release with notes and the direct
   download link. `feat/steamify` makes a `dev.` pre-release, `master` a real one.
-- `.github/workflows/iso-2-gitea-build.yml` (Gitea, `on: push: tags: v*`, skipped on GitHub) runs three jobs for that
-  tag: build the ISO, test it (steamify-cachyos-dev's `scripts/vmbootloadertest.sh --install --quick` (only that the ISO installs correctly: boot entry, OS name, loader, Steamify state and modules; steamify.sh itself is tested in steamify-cachyos) per loader on a VM that reports Steam Machine hardware (`--fremont`: poweroff, cec and the 3 DKMS modules must be there), then the same with `--generic` on a plain PC (they must not),
-  parallel up to the runner's capacity; needs `/dev/kvm` on the runner and checks out steamify-cachyos-dev `main` and
-  steamify-cachyos at the ISO's version from the mirror), and only when all tests passed attach it to the mirror's release. The tag decides everything: Steamify version (`steamify-prepare.sh`
+- `.github/workflows/iso-2-gitea-build.yml` (Gitea, `on: push: tags: v*`, skipped on GitHub) runs two jobs for that
+  tag: build the ISO, then attach it to the mirror's release. It is not tested there (the runner is small): the VM tests
+  run on GitHub, in steamify-cachyos `vmtest.yml`, on the newest ISO release of the mirror. The tag decides everything: Steamify version (`steamify-prepare.sh`
   takes `STEAMIFY_VERSION`), file name (`STEAMIFY_ISO_VERSION` -> `iso_version` in `profiledef.sh`), label
   (`STEAMIFY_BUILD_STAMP`), boot menu and `/etc/steammachine-iso-build`. The build reads no clock; without a
   tag everything says `local`.
@@ -132,4 +131,4 @@ Full write-up, with every trap: `steamify-iso-release` in steamify-cachyos-dev. 
 - Gitea needs `[repository.release] FILE_MAX_SIZE` above the ISO (413 otherwise) and the runner
   `container: privileged: true` (archiso mounts `/proc`); the workflow's `--privileged` option is ignored.
 - Caches (`actions/cache`, the runner's cache server): pacman's package cache per job kind (build, test) and the VMs' packages (`VM_CACHE`, `~/vms/pkg-cache`), keys per ISO week. Each job first installs only node and git, restores the caches, then installs the rest.
-- CachyOS's own `Desktop ISO` workflow (`build.yml`) is removed here; the test job of iso-2-gitea-build.yml replaces it.
+- CachyOS's own `Desktop ISO` workflow (`build.yml`) is removed here; the VM tests live in steamify-cachyos (GitHub).
