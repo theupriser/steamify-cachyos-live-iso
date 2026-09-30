@@ -198,3 +198,42 @@ jobs:
             out/desktop/*.iso.sha256
             out/desktop/*.iso.sha1
             out/desktop/*.pkgs.txt
+
+  # The result goes back to GitHub: the badge at the top of the GitHub release (started as "running" by iso-1) becomes
+  # succeeded / failed / cancelled and links to this run. Needs a GitHub token as the secret GH_RELEASE_TOKEN here on the
+  # mirror (fine-grained, this repository only, Contents: read and write); without it the badge stays "running".
+  report:
+    name: Report the result to GitHub
+    needs: [build, release]
+    if: ${{ always() && github.server_url != 'https://github.com' }}
+    runs-on: ubuntu-latest
+    container:
+      image: docker.io/cachyos/cachyos:latest
+    steps:
+      - name: Badge in the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          BUILD: ${{ needs.build.result }}
+          RELEASE: ${{ needs.release.result }}
+        run: |
+          [ -n "$GH_TOKEN" ] || { echo "No GH_RELEASE_TOKEN: GitHub's release keeps its 'running' badge."; exit 0; }
+          pacman -Sy --noconfirm --needed curl python > /dev/null
+          tag="${{ github.ref_name }}"
+          if [ "$BUILD" = success ] && [ "$RELEASE" = success ]; then st=succeeded col=brightgreen
+          elif [ "$BUILD" = cancelled ] || [ "$RELEASE" = cancelled ]; then st=cancelled col=lightgrey
+          else st=failed col=red; fi
+          run="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          api="https://api.github.com/repos/theupriser/steamify-cachyos-live-iso/releases"
+          curl -fsS -H "Authorization: Bearer $GH_TOKEN" "$api/tags/$tag" -o /tmp/rel.json || { echo "::warning::no GitHub release for $tag"; exit 0; }
+          ST="$st" COL="$col" RUN="$run" python3 - << 'PY'
+          import json, os, re
+          d = json.load(open("/tmp/rel.json"))
+          badge = f"[![ISO build](https://img.shields.io/badge/ISO_build-{os.environ['ST']}-{os.environ['COL']})]({os.environ['RUN']})"
+          body = d.get("body") or ""
+          pat = re.compile(r"\[?!\[ISO build\]\([^)]*\)(\]\([^)]*\))?")
+          body = pat.sub(lambda m: badge, body, count=1) if pat.search(body) else badge + "\n\n" + body
+          json.dump({"body": body}, open("/tmp/patch.json", "w"))
+          open("/tmp/rel.id", "w").write(str(d["id"]))
+          PY
+          curl -fsS -X PATCH -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/json" -d @/tmp/patch.json "$api/$(cat /tmp/rel.id)" > /dev/null
+          echo "GitHub release $tag: ISO build $st"

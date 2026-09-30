@@ -67,7 +67,9 @@ jobs:
           file="steamify-cachyos-${tag#v}-x86_64.iso" dl="$GITEA_URL/$GITEA_REPO/releases/download/$tag"
           # The Steamify section of CHANGELOG.md ("## CachyOS with Steamify Live ISO"), without its heading.
           section="$(awk '/^## CachyOS with Steamify Live ISO/ {found = 1; next} found && /^#/ {exit} found' CHANGELOG.md)"
-          notes="The ISO is built from \`$(git rev-parse --short HEAD)\` (${{ github.ref_name }}) with Steamify $steamify${sref:+ (branch $sref)} and published on the mirror (GitHub releases take at most 2 GB per file), about half an hour after this release (the mirror's sync, then the build):
+          notes="![ISO build](https://img.shields.io/badge/ISO_build-running-yellow)
+
+          The ISO is built from \`$(git rev-parse --short HEAD)\` (${{ github.ref_name }}) with Steamify $steamify${sref:+ (branch $sref)} and published on the mirror (GitHub releases take at most 2 GB per file), about half an hour after this release (the mirror's sync, then the build):
 
           **Download: [$file]($dl/$file)** ([SHA-256]($dl/$file.sha256), [release page]($GITEA_URL/$GITEA_REPO/releases/tag/$tag))
 

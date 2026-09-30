@@ -134,3 +134,8 @@ Full write-up, with every trap: `steamify-iso-release` in steamify-cachyos-dev. 
   `container: privileged: true` (archiso mounts `/proc`); the workflow's `--privileged` option is ignored.
 - Caches (`actions/cache`, the runner's cache server): pacman's package cache per job kind (build, test) and the VMs' packages (`VM_CACHE`, `~/vms/pkg-cache`), keys per ISO week. Each job first installs only node and git, restores the caches, then installs the rest.
 - CachyOS's own `Desktop ISO` workflow (`build.yml`) is removed here; the VM tests live in steamify-cachyos (GitHub).
+
+- **Build badge in the GitHub release:** iso-1 puts `![ISO build](...running-yellow)` at the top of the release notes;
+  iso-2's last job `report` (`if: always()`) replaces it with succeeded / failed / cancelled, linked to the Gitea run,
+  through the GitHub API with the Gitea secret `GH_RELEASE_TOKEN` (fine-grained, this repo, Contents read and write).
+  Without the secret the badge stays "running". Gitea's own badge can't show these runs (they run on a tag ref).
