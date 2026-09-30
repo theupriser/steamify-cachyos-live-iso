@@ -65,20 +65,10 @@ jobs:
 
           $section"
           # One ISO per day and kind: the newest build of a day replaces the earlier one (space), here and on the mirror.
-          mirror_sync() { [ -n "$GIT_UPRISER_TOKEN" ] && curl -fsS --retry 5 --retry-delay 10 --retry-all-errors -X POST -H "Authorization: token $GIT_UPRISER_TOKEN" "$GITEA_URL/api/v1/repos/$GITEA_REPO/mirror-sync" > /dev/null; }
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null 2>&1 || gh release view "$tag" > /dev/null 2>&1; then
             echo "$tag exists: replacing it"
             gh release delete "$tag" --cleanup-tag -y 2> /dev/null || true
             git push origin ":refs/tags/$tag" 2> /dev/null || true
-            # The mirror has to see the tag go (it drops the tag and its release with the ISO); otherwise the new tag is only an
-            # update there and starts no build.
-            if mirror_sync; then
-              # The tag list, not .../tags/<tag>: that URL answers 404 on this server even for tags that exist.
-              for _ in $(seq 36); do
-                curl -s "$GITEA_URL/api/v1/repos/$GITEA_REPO/tags?limit=100" | grep -q "\"name\":\"$tag\"" || break
-                sleep 5
-              done
-            fi
           fi
           # An annotated tag: its own date, so the mirror sorts releases on the same commit in order (a
           # lightweight tag only has its commit's date).
@@ -87,6 +77,7 @@ jobs:
           git tag -a "$tag" -m "$name" "$GITHUB_SHA" && git push origin "refs/tags/$tag"
           gh release create "$tag" --verify-tag $pre --title "$name" --notes "$notes"
           echo "Released $tag"
+          echo "ISO_TAG=$tag" >> "$GITHUB_ENV"
 
           # Retention (space): at most 10 dev and 10 real releases; the oldest go, release and tag. The mirror drops the
           # tag with its release and ISO at its next sync (the step below).
@@ -97,12 +88,25 @@ jobs:
               while read -r old; do echo "Retention: removing $old"; gh release delete "$old" --cleanup-tag -y; done
           done
 
-      # Optional: sync the mirror at once instead of at its interval (a Gitea token with repository write
-      # access as the secret GIT_UPRISER_TOKEN).
-      - name: Sync the Gitea mirror
+      # The mirror takes the tag (sync), then the build on the mirror is started explicitly (its dispatch API): a tag that
+      # is replaced (same name, a new tag object) starts no run there by itself. Needs a Gitea token with repository write
+      # access as the secret GIT_UPRISER_TOKEN; without it the mirror picks the tag up later and nothing is built.
+      - name: Sync the Gitea mirror and start its build
         env:
           GIT_UPRISER_TOKEN: ${{ secrets.GIT_UPRISER_TOKEN }}
         run: |
-          if [ -z "$GIT_UPRISER_TOKEN" ]; then echo "No GIT_UPRISER_TOKEN: the mirror picks the tag up at its next sync."; exit 0; fi
-          curl -fsS --retry 5 --retry-delay 10 --retry-all-errors -X POST -H "Authorization: token $GIT_UPRISER_TOKEN" "$GITEA_URL/api/v1/repos/$GITEA_REPO/mirror-sync" &&
-            echo "Mirror sync started"
+          if [ -z "$GIT_UPRISER_TOKEN" ]; then echo "No GIT_UPRISER_TOKEN: the mirror is not synced and no build is started."; exit 0; fi
+          api="$GITEA_URL/api/v1/repos/$GITEA_REPO"
+          curl -fsS --retry 5 --retry-delay 10 --retry-all-errors -X POST -H "Authorization: token $GIT_UPRISER_TOKEN" "$api/mirror-sync"
+          echo "Mirror sync started"
+          want="$(git rev-parse "refs/tags/$ISO_TAG")"
+          for _ in $(seq 60); do
+            got="$(curl -s "$api/tags/$ISO_TAG" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' 2> /dev/null)"
+            [ "$got" = "$want" ] && break
+            sleep 5
+          done
+          [ "$got" = "$want" ] || { echo "::error::the mirror does not have $ISO_TAG ($want) after 5 minutes"; exit 1; }
+          # ref: the full name (refs/tags/...), as in Gitea's API documentation; --fail-with-body shows the server's reason.
+          curl -sS --fail-with-body --retry 3 -X POST -H "Authorization: token $GIT_UPRISER_TOKEN" -H "Content-Type: application/json" \
+              -d "{\"ref\":\"refs/tags/$ISO_TAG\"}" "$api/actions/workflows/iso-2-gitea-build.yml/dispatches"
+          echo "Started the mirror's build for $ISO_TAG"
