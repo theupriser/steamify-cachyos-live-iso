@@ -35,7 +35,9 @@ Item {
 
     function label(r) { return (Texts.items[r.id] || {}).label || r.label; }
     function hint(r) { return (Texts.items[r.id] || {}).hint || r.hint; }
-    function shown(r) { return !r.parent || !!want[r.parent]; }
+    // `needs: "boot"` (Steamify's --defaults --list): only with Boot into Desktop.
+    function shown(r) { return (!r.parent || !!want[r.parent]) && (r.needs !== "boot" || boot === "desktop") &&
+                                          !(r.hideWhen && want[r.hideWhen]); }
 
     // Steamify's own rules: a sub-option needs its parent (turning a parent
     // off turns its sub-options off); single user mode needs the conversion.
@@ -46,7 +48,8 @@ Item {
             var r = rows[i];
             if (w[id] && r.id === id && r.parent) w[r.parent] = true;
             if (!w[id] && r.parent === id && r.kind === "toggle") w[r.id] = false;
-            if (w[id] && r.parent === id && r.kind === "toggle") w[r.id] = true;   // opt-out sub-options
+            if (w[id] && r.parent === id && r.kind === "toggle") w[r.id] = !(r.hideWhen && w[r.hideWhen]);   // opt-out sub-options
+            if (w[id] && r.hideWhen === id) w[r.id] = false;   // Big Picture and a silent start exclude each other
         }
         if (id === "single" && w.single) w.gaming = true;
         if (id === "gaming" && !w.gaming) { w.single = false; boot = "gamescope"; }
@@ -56,7 +59,7 @@ Item {
     function choice() {
         var on = [];
         for (var i = 0; i < rows.length; i++)
-            if (rows[i].kind === "toggle" && want[rows[i].id]) on.push(rows[i].id);
+            if (rows[i].kind === "toggle" && want[rows[i].id] && shown(rows[i])) on.push(rows[i].id);
         if (want.gaming && boot === "desktop") on.push("boot");
         // ", " (not ","): Calamares' packagechooser Summary step shows this
         // value raw ("Install option: <value>"); steamify-install still
