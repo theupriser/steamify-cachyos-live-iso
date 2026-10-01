@@ -11,18 +11,14 @@ Tick items off as they are done; the newest entries are at the top of each list.
       Still to do: a Python job (e.g. `steamifychoice`, before `packages@online`) that normalizes either page's choice
       (`packagechooser_steamifypage` GS key, or netinstall's packageOperations markers) into one `steamifyChoice`
       GS key, so `shellprocess_steamify.conf` doesn't need to know which page ran.
-- [ ] **Check the names after the next build**: the installer title, Hello and About this System say CachyOS (only the
+- [ ] **Names, the live session**: the installed system's names were checked (2026-09-30: `os-release` and `lsb-release` are
+      CachyOS's, test B3). Still to look at: the installer title, Hello and About this System in the live session (only the
       installer says Steamify).
 - [ ] **Test on the real Steam Machine** from a USB stick (gamescope, LEDs, CEC, power-off) before calling the ISO usable.
-- [ ] **Retention** (PR #22, at most 10 dev + 10 real releases, deleting the mirror's release with the ISO too): watch it
-      the first time there are more than 10 releases of a kind; until then it is untested.
-- [ ] **Build badge**: the failed and cancelled states, and a build that is superseded by a newer one, haven't been seen
-      yet (only succeeded). A crashed runner leaves the badge on "running".
-- [ ] **Same-day replacement on the mirror** of a real release (second `kind=release` build of one day): check that the
-      mirror's release gets the new ISO (new asset id) and notes.
-- [ ] **CHANGELOG.md**: the hand-written section `## CachyOS with Steamify Live ISO` is no longer used (the release notes
-      are generated); delete it or turn it into something else.
-- [ ] **Release notes**: the list of ISO changes is raw commit subjects (ci/docs left out); maybe filter or group them.
+- [ ] **Retention, first clean-up**: the code is merged (PR #22: at most 10 dev + 10 real releases, the mirror's release with
+      its ISO is deleted first). Watch the first time there are more than 10 releases of a kind; it hasn't run yet.
+- [ ] **Build badge, the other states**: succeeded was seen (`v2.9.6-260930`). Failed, cancelled and a build superseded by a
+      newer one haven't been seen; a crashed runner leaves the badge on "running".
 - [ ] **Check with the CachyOS team** whether the installer branding and the ISO file name are fine with them.
 - [ ] **Drop the Boost 1.91 workaround** in `steamify-prepare.sh` once `cachyos-calamares-next` is rebuilt against the repos' Boost.
 
@@ -42,7 +38,12 @@ Tick items off as they are done; the newest entries are at the top of each list.
       mirror), linked to the public Gitea run.
 - [x] **Generated release notes** and title (`CachyOS <base> with Steamify <version> (<date> UTC)`): base version, Steamify's
       changelog section, commits since the previous release; the mirror's release uses the same text.
-- [x] **Retention** of at most 10 dev and 10 real releases (PR #22 also deletes the mirror's release with its ISO).
+- [x] **Retention** of at most 10 dev and 10 real releases, deleting the mirror's release with its ISO too (PR #22; first
+      clean-up still to be seen, above).
+- [x] **Old hand-written `CHANGELOG.md` section** (`## CachyOS with Steamify Live ISO`) removed: the release notes are generated.
+- [x] **Same-day replacement of a real release** (2026-09-30): the official build for `v2.9.6-260930` replaced the test build's
+      release on the mirror (ISO asset 42 -> 50, new title and generated notes, badge green with the public run link).
+- [x] **Release notes** leave out the workflow and docs commits (`ci`, `docs`, `…(ci):`) in their list of ISO changes.
 - [x] **The ISO is built on the Gitea mirror's runner** (`iso-2-gitea-build.yml`) and hosted there (over GitHub's 2 GB limit);
       the VM tests run locally (`scripts/vmtest.sh --install` in steamify-cachyos-dev), not on the runners.
 - [x] **Build in the test VM instead of on the Steam Machine**: superseded by the runner above.
