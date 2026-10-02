@@ -35,7 +35,7 @@ Item {
 
     function label(r) { return (Texts.items[r.id] || {}).label || r.label; }
     function hint(r) { return (Texts.items[r.id] || {}).hint || r.hint; }
-    // `needs: "boot"` (Steamify's --defaults --list): only with Boot into Desktop.
+    // `needs: "boot"` (an older Steamify's --defaults --list): only with Boot into Desktop.
     function shown(r) { return (!r.parent || !!want[r.parent]) && (r.needs !== "boot" || boot === "desktop") &&
                                           !(r.hideWhen && want[r.hideWhen]); }
 
