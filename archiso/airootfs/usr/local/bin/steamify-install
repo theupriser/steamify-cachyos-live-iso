@@ -54,8 +54,12 @@ rule="$root/etc/sudoers.d/zz-steamify-install"
 install -Dm755 /usr/local/share/steamify/steamify.sh "$root/var/tmp/steamify.sh"
 printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$user" > "$rule"
 chmod 440 "$rule"
+# steamify.nodownload on the live system's kernel command line (or STEAMIFY_NO_DOWNLOAD): the installed system
+# keeps this ISO's Steamify at its first login too, instead of the newest release.
+nodl=()
+if [[ -n "${STEAMIFY_NO_DOWNLOAD:-}" ]] || grep -qw steamify.nodownload /proc/cmdline; then nodl=(STEAMIFY_NO_DOWNLOAD=1); fi
 arch-chroot "$root" runuser -u "$user" -- env -i HOME="/home/$user" USER="$user" LOGNAME="$user" \
-    PATH=/usr/local/bin:/usr/bin TERM=dumb LANG=C.UTF-8 \
+    PATH=/usr/local/bin:/usr/bin TERM=dumb LANG=C.UTF-8 "${nodl[@]}" \
     bash -c 'cd ~ && bash /var/tmp/steamify.sh --defaults --options "$0" --boot "$1" < /dev/null' "$options" "$boot" > "$log" 2>&1
 echo "exit: $?" >> "$log"
 rm -f "$rule" "$root/var/tmp/steamify.sh"

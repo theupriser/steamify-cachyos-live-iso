@@ -8,6 +8,7 @@ QtObject {
     readonly property var rows: [
         { id: "gaming", label: "SteamOS conversion", hint: "boot into gaming mode, Steam on the desktop", kind: "toggle", parent: "", on: true, selectable: true },
         { id: "boot", label: "Boot into", hint: "", kind: "choice", parent: "gaming", on: false, selectable: true },
+        { id: "silent", label: "Start Steam silently in desktop mode", hint: "in the tray at login on the desktop, no window", kind: "toggle", parent: "gaming", needs: "", on: true, selectable: true },
         { id: "theme", label: "Install SteamOS theme", hint: "Vapor look (cachyos-vapor)", kind: "toggle", parent: "", on: true, selectable: true },
         { id: "glyphs", label: "Install Steam Deck/Machine icons", hint: "Deck button icons in gaming mode", kind: "toggle", parent: "", on: true, selectable: true },
         { id: "single", label: "Single user mode", hint: "no password, lock screen or log out (SDDM)", kind: "toggle", parent: "", on: true, selectable: true },
