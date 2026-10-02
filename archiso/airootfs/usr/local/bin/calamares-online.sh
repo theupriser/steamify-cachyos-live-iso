@@ -69,14 +69,18 @@ EOF
     # any, so "$sdir" would still be empty in the same one.
     local sdir=/usr/local/share/steamify
     local sbin="$sdir/steamify.sh" sqml="$sdir/qml"
+    # STEAMIFY_NO_DOWNLOAD=1 or `steamify.nodownload` on the kernel command line: keep the ISO's own
+    # copy, e.g. to test an unreleased Steamify (the newest release would replace it).
+    local nodl=
+    if [[ -n "${STEAMIFY_NO_DOWNLOAD:-}" ]] || grep -qw steamify.nodownload /proc/cmdline; then nodl=1; fi
     local tmp; tmp="$(mktemp)"
-    if curl -fsSL --max-time 20 https://github.com/theupriser/steamify-cachyos/releases/latest/download/steamify.sh -o "$tmp" &&
+    if [[ -z "$nodl" ]] && curl -fsSL --max-time 20 https://github.com/theupriser/steamify-cachyos/releases/latest/download/steamify.sh -o "$tmp" &&
         grep -q -- '--defaults' "$tmp"; then
         sudo install -Dm755 "$tmp" "$sbin"
     fi
     rm -f "$tmp"
     tmp="$(mktemp -d)"
-    if curl -fsSL --max-time 20 https://github.com/theupriser/steamify-cachyos/releases/latest/download/steamify-app.tar.gz |
+    if [[ -z "$nodl" ]] && curl -fsSL --max-time 20 https://github.com/theupriser/steamify-cachyos/releases/latest/download/steamify-app.tar.gz |
         tar -xz -C "$tmp" --strip-components=2 ui/qml/Theme.qml ui/qml/Texts.qml 2>/dev/null; then
         sudo cp "$tmp/Theme.qml" "$tmp/Texts.qml" "$sqml/"
     fi
