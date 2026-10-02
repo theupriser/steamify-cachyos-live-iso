@@ -32,6 +32,9 @@ Tick items off as they are done; the newest entries are at the top of each list.
 - [x] **Always from `master`**: `iso-1-github-tag.yml` takes `kind` (release, dev, auto); steamify-cachyos' `bundle.yml` asks
       for `release` (a version published from main) or `dev` (an unreleased version on a release branch).
 - [x] **`steamify_ref`**: a release branch builds its dev ISO with its own Steamify (and VERSION) before it is released.
+- [x] **`steamify.nodownload`** (kernel command line) or `STEAMIFY_NO_DOWNLOAD=1`: the live session keeps the ISO's own Steamify
+      (`calamares-online.sh` would replace it by the newest release), and `steamify-install` passes it on, so the installed system's
+      first login runs the ISO's bundle too. For testing an unreleased Steamify; tested with Steamify 2.11.0 (three installs).
 - [x] **The mirror's build is started by dispatch** after the mirror has the new tag object (a replaced tag starts no run by
       itself; the dispatch needs the full ref `refs/tags/<tag>`).
 - [x] **Build badge** in the GitHub release: running, then succeeded / failed / cancelled (secret `GH_RELEASE_TOKEN` on the
