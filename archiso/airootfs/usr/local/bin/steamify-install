@@ -9,9 +9,15 @@
 # takes the last matching rule, and a later %wheel rule would ask again. Never fails the install: a
 # problem leaves the log and Steamify can be run again from the desktop.
 root="$1" user="$2" choice="${3:-}"
-# Not filled in by Calamares (empty, or the literal ${gs[...]}): the page's
-# default, everything on.
-[[ -z "$choice" || "$choice" == *'${'* ]] && choice=gaming,theme,glyphs,single,launcher,notify,vram,cec,machine,poweroff
+# Not filled in by Calamares (empty, or the literal ${gs[...]}): the page's default. HDMI-CEC and the
+# Steam Machine items are ticked there only on a Steam Machine (Steamify's detect_valve_fremont).
+if [[ -z "$choice" || "$choice" == *'${'* ]]; then
+    choice=gaming,theme,glyphs,single,launcher,notify,vram
+    vendor="$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null)" product="$(cat /sys/class/dmi/id/product_name 2>/dev/null)"
+    if [[ "$vendor" == Valve && "$product" == Fremont ]] || [[ "$vendor" == OEM && "$product" == F7F ]]; then
+        choice+=,cec,machine,poweroff
+    fi
+fi
 boot=gamescope options=""
 for id in ${choice//,/ }; do
     case "$id" in
